@@ -679,9 +679,41 @@
                                 )}
                             </div>
                             <p className="text-sm lg:text-xs text-slate-600 font-medium leading-relaxed italic">"{doctor.bio}"</p>
-                            <div className="p-4 lg:p-3 bg-slate-50 border border-slate-100 space-y-2 lg:space-y-1">
-                                <h4 className="text-xs font-black uppercase tracking-widest text-slate-900">Local de Atendimento</h4>
-                                <p className="text-sm font-black uppercase text-slate-900">{doctor.address || doctor.clinicAddress || 'Endereço não informado'}</p>
+                            {/* Seção de Localização da Clínica no Agendamento */}
+                            <div className="p-5 lg:p-4 bg-slate-50 border-2 border-slate-200 space-y-3">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
+                                    <div>
+                                        <h4 className="text-xs font-black uppercase tracking-widest text-slate-900 flex items-center gap-2">
+                                            <i className="fas fa-map-marked-alt text-red-600 text-sm"></i>
+                                            Localização da Clínica / Consultório
+                                        </h4>
+                                        <p className="text-xs font-black uppercase text-slate-900 mt-1">
+                                            {doctor.address || doctor.clinicAddress || `${doctor.city || ''}, ${doctor.state || ''}`}
+                                        </p>
+                                    </div>
+                                    <a 
+                                        href={doctor.mapUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((doctor.address || '') + ' ' + (doctor.city || '') + ' ' + (doctor.state || ''))}`} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer"
+                                        className="px-4 py-2.5 bg-red-600 text-white font-black uppercase text-[10px] tracking-widest hover:bg-red-700 transition-all flex items-center justify-center gap-2 shadow-sm shrink-0"
+                                    >
+                                        <i className="fas fa-directions"></i> COMO CHEGAR (GOOGLE MAPS)
+                                    </a>
+                                </div>
+
+                                {/* Mapa Interativo Embutido */}
+                                <div className="w-full h-52 lg:h-44 border border-slate-300 rounded overflow-hidden shadow-inner relative bg-slate-200">
+                                    <iframe 
+                                        width="100%" 
+                                        height="100%" 
+                                        style={{ border: 0 }} 
+                                        loading="lazy" 
+                                        allowFullScreen 
+                                        referrerPolicy="no-referrer-when-downgrade"
+                                        src={`https://maps.google.com/maps?q=${encodeURIComponent((doctor.address || '') + ' ' + (doctor.city || '') + ' ' + (doctor.state || ''))}&t=&z=15&ie=UTF8&iwloc=&output=embed`}
+                                        title={`Mapa da clínica - ${doctor.name}`}
+                                    ></iframe>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -887,6 +919,12 @@
             const [specialties, setSpecialties] = useState(['']);
             const [clinics, setClinics] = useState(['']);
             
+            // Location and Map state
+            const [signupAddress, setSignupAddress] = useState('');
+            const [signupCity, setSignupCity] = useState('');
+            const [signupState, setSignupState] = useState('');
+            const [signupMapUrl, setSignupMapUrl] = useState('');
+            
             const addSpecialty = () => setSpecialties([...specialties, '']);
             const updateSpecialty = (index, value) => { const newSpecs = [...specialties]; newSpecs[index] = value; setSpecialties(newSpecs); };
             const removeSpecialty = (index) => { if (specialties.length > 1) setSpecialties(specialties.filter((_, i) => i !== index)); };
@@ -895,10 +933,17 @@
             const updateClinic = (index, value) => { const newClinics = [...clinics]; newClinics[index] = value; setClinics(newClinics); };
             const removeClinic = (index) => { if (clinics.length > 1) setClinics(clinics.filter((_, i) => i !== index)); };
 
+            const locationQueryStr = [signupAddress, signupCity, signupState].filter(Boolean).join(', ');
+
             const handleSubmit = (e) => {
                 e.preventDefault();
                 const formData = new FormData(e.currentTarget);
                 const isPJ = partnerType === 'pj';
+                const mapUrlValue = formData.get('mapUrl');
+                const fullAddressStr = [formData.get('address'), formData.get('city'), formData.get('state')].filter(Boolean).join(', ');
+                const finalMapUrl = mapUrlValue && mapUrlValue.trim() !== ''
+                    ? mapUrlValue.trim()
+                    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddressStr)}`;
                 
                 const newDoctor = {
                     id: Math.random().toString(36).substr(2, 9),
@@ -912,6 +957,7 @@
                     city: formData.get('city'),
                     state: formData.get('state'),
                     address: formData.get('address'),
+                    mapUrl: finalMapUrl,
                     onlineConsultation: formData.get('onlineConsultation') === 'on',
                     image: isPJ ? "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&q=80&w=400" : "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=400",
                     bio: formData.get('bio'),
@@ -920,7 +966,7 @@
                     workConfig: DEFAULT_WORK_CONFIG,
                     accessCode: formData.get('accessCode').trim().toUpperCase(),
                     paymentStatus: "unpaid",
-                    status: "active",
+                    status: "pending",
                     createdAt: new Date().toISOString(),
                     professionals: [] // Only for PJ
                 };
@@ -928,7 +974,7 @@
                 setStep('success');
             };
 
-            if (step === 'success') return <div className="lg:max-w-none mx-auto py-12 lg:py-8 text-center border border-red-600 bg-white shadow-2xl mt-10"><h2 className="text-xl lg:text-lg font-black text-red-600 mb-1 uppercase">Cadastrado!</h2><p className="text-[11px] font-bold text-slate-900 uppercase tracking-widest mb-4">Seu perfil está em análise. Em breve você poderá acessar o painel.</p><button onClick={() => window.location.hash = '#home'} className="mt-4 px-8 py-3 bg-red-600 text-white font-black uppercase text-[11px] hover:bg-red-700 transition-all active-scale shadow-lg">INÍCIO</button></div>;
+            if (step === 'success') return <div className="lg:max-w-none mx-auto py-12 lg:py-8 text-center border border-red-600 bg-white shadow-2xl mt-10"><h2 className="text-xl lg:text-lg font-black text-red-600 mb-1 uppercase">Cadastrado com Sucesso!</h2><p className="text-[11px] font-bold text-slate-900 uppercase tracking-widest mb-4">Seu acesso precisa ser liberado pelo administrador no painel admin. Você já pode acessar o painel profissional com sua senha.</p><button onClick={() => window.location.hash = '#home'} className="mt-4 px-8 py-3 bg-red-600 text-white font-black uppercase text-[11px] hover:bg-red-700 transition-all active-scale shadow-lg">INÍCIO</button></div>;
 
             return (
                 <div className="lg:max-w-none mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-6 animate-slide-up">
@@ -992,11 +1038,85 @@
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-3">
                                     <div className="space-y-1"><label className="text-[10px] font-black uppercase tracking-widest text-slate-900">Valor Consulta (R$)</label><input name="price" type="number" required placeholder="EX: 250" className="w-full p-3 lg:p-2 border border-slate-200 font-black uppercase text-[12px] outline-none focus:border-red-600" /></div>
                                 </div>
-                                <div className="space-y-1"><label className="text-[10px] font-black uppercase tracking-widest text-slate-900">Endereço</label><input name="address" required placeholder="RUA, NÚMERO, BAIRRO" className="w-full p-3 lg:p-2 border border-slate-200 font-black uppercase text-[12px] outline-none focus:border-red-600" /></div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-3">
-                                    <div className="space-y-1"><label className="text-[10px] font-black uppercase tracking-widest text-slate-900">Cidade</label><input name="city" required placeholder="SÃO PAULO" className="w-full p-3 lg:p-2 border border-slate-200 font-black uppercase text-[12px] outline-none focus:border-red-600" /></div>
-                                    <div className="space-y-1"><label className="text-[10px] font-black uppercase tracking-widest text-slate-900">UF</label><input name="state" required placeholder="SP" maxLength={2} className="w-full p-3 lg:p-2 border border-slate-200 font-black uppercase text-[12px] outline-none focus:border-red-600" /></div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-900">Endereço Completo</label>
+                                    <input 
+                                        name="address" 
+                                        required 
+                                        placeholder="RUA, NÚMERO, BAIRRO" 
+                                        value={signupAddress} 
+                                        onChange={(e) => setSignupAddress(e.target.value)}
+                                        className="w-full p-3 lg:p-2 border border-slate-200 font-black uppercase text-[12px] outline-none focus:border-red-600" 
+                                    />
                                 </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-3">
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-900">Cidade</label>
+                                        <input 
+                                            name="city" 
+                                            required 
+                                            placeholder="SÃO PAULO" 
+                                            value={signupCity}
+                                            onChange={(e) => setSignupCity(e.target.value)}
+                                            className="w-full p-3 lg:p-2 border border-slate-200 font-black uppercase text-[12px] outline-none focus:border-red-600" 
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-900">UF</label>
+                                        <input 
+                                            name="state" 
+                                            required 
+                                            placeholder="SP" 
+                                            maxLength={2} 
+                                            value={signupState}
+                                            onChange={(e) => setSignupState(e.target.value)}
+                                            className="w-full p-3 lg:p-2 border border-slate-200 font-black uppercase text-[12px] outline-none focus:border-red-600" 
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Bloco de Indicação de Localização no Mapa */}
+                                <div className="p-4 bg-slate-50 border-2 border-slate-300 space-y-3 my-3">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-[11px] font-black uppercase tracking-widest text-red-600 flex items-center gap-2">
+                                            <i className="fas fa-map-marked-alt text-base"></i>
+                                            Indicar Localização no Mapa
+                                        </label>
+                                        <span className="text-[9px] font-black uppercase bg-red-600 text-white px-2 py-0.5 rounded">
+                                            Obrigatório
+                                        </span>
+                                    </div>
+                                    
+                                    <p className="text-[10px] text-slate-900 font-bold uppercase leading-relaxed">
+                                        Confirme a localização exata no mapa abaixo. O mapa é atualizado automaticamente ao digitar o endereço ou ao inserir o link do Google Maps.
+                                    </p>
+
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] font-black uppercase tracking-widest text-slate-900">Link Personalizado do Google Maps / Coordenadas (Opcional)</label>
+                                        <input 
+                                            name="mapUrl" 
+                                            placeholder="EX: HTTPS://MAPS.GOOGLE.COM/?Q=..." 
+                                            value={signupMapUrl}
+                                            onChange={(e) => setSignupMapUrl(e.target.value)}
+                                            className="w-full p-2.5 border border-slate-200 font-black uppercase text-[11px] outline-none focus:border-red-600 bg-white" 
+                                        />
+                                    </div>
+
+                                    {/* Exibição em Tempo Real do Mapa */}
+                                    <div className="w-full h-48 border border-slate-300 rounded overflow-hidden shadow-inner bg-slate-200 relative">
+                                        <iframe 
+                                            width="100%" 
+                                            height="100%" 
+                                            style={{ border: 0 }} 
+                                            loading="lazy" 
+                                            allowFullScreen 
+                                            referrerPolicy="no-referrer-when-downgrade"
+                                            src={`https://maps.google.com/maps?q=${encodeURIComponent(locationQueryStr || 'Brasil')}&t=&z=15&ie=UTF8&iwloc=&output=embed`}
+                                            title="Mapa de Indicação de Localização"
+                                        ></iframe>
+                                    </div>
+                                </div>
+
                                 <div className="space-y-1"><label className="text-[10px] font-black uppercase tracking-widest text-slate-900">Biografia</label><textarea name="bio" required className="w-full p-3 lg:p-2 border border-slate-200 font-black uppercase text-[12px] min-h-[80px] lg:min-h-[60px] outline-none focus:border-red-600"></textarea></div>
                                 <div className="flex items-center gap-3 p-3 lg:p-2 bg-slate-50 border border-slate-100"><input type="checkbox" name="onlineConsultation" id="onlineConsultation" className="w-4 h-4 accent-red-600" /><label htmlFor="onlineConsultation" className="text-[11px] font-black uppercase text-slate-900 cursor-pointer">Ofereço Consulta Online</label></div>
                                 <div className="space-y-1 pt-2 lg:pt-1"><label className="text-[10px] font-black uppercase tracking-widest text-slate-900">Senha Painel</label><input name="accessCode" required type="password" placeholder="CRIE UMA SENHA" className="w-full p-3 lg:p-2 border border-slate-200 bg-white text-slate-900 font-black uppercase text-[12px] text-center outline-none focus:border-red-600" /></div>
@@ -1514,6 +1634,19 @@
 
             return (
                 <div className="lg:max-w-none mx-auto animate-slide-up px-4 lg:px-0">
+                    {loggedInDoctor?.status === 'pending' && (
+                        <div className="bg-amber-50 border-2 border-amber-500 p-4 lg:p-3 mb-6 flex items-start sm:items-center gap-3 shadow-md animate-slide-up">
+                            <div className="w-8 h-8 bg-amber-500 text-white rounded-full flex items-center justify-center font-black shrink-0 text-sm mt-0.5 sm:mt-0">
+                                <i className="fas fa-exclamation-triangle"></i>
+                            </div>
+                            <div className="flex-1">
+                                <p className="text-xs font-black uppercase text-amber-900">Acesso Pendente de Liberação</p>
+                                <p className="text-[11px] font-bold uppercase text-amber-800 mt-0.5 leading-relaxed">
+                                    Seu cadastro foi realizado com sucesso. O seu perfil precisa ser liberado pelo administrador no painel admin para ficar visível para agendamentos de pacientes.
+                                </p>
+                            </div>
+                        </div>
+                    )}
                     <div className="flex flex-col md:flex-row justify-between items-center bg-white p-8 lg:p-3 text-slate-900 border border-slate-200 border-b-4 border-red-600 shadow-xl mb-8 lg:mb-3">
                         <div className="flex flex-col sm:flex-row items-center gap-6 lg:gap-3 text-center sm:text-left">
                             <div className="relative group shrink-0">
@@ -1667,6 +1800,35 @@
                                         if (loggedInProfessionalId) updateActiveProfessional({ address: val });
                                         else setLocalDoctor(prev => ({ ...prev, address: val }));
                                     }} /></div>
+                                    
+                                    <div className="md:col-span-2 space-y-2">
+                                        <label className="text-[9px] font-black uppercase tracking-widest text-slate-900 flex items-center gap-2">
+                                            <i className="fas fa-map-marked-alt text-red-600"></i>
+                                            Link do Google Maps / Coordenadas (Opcional)
+                                        </label>
+                                        <input 
+                                            className="w-full p-4 border border-slate-200 font-black uppercase text-xs focus:border-red-600 outline-none" 
+                                            placeholder="EX: HTTPS://MAPS.GOOGLE.COM/?Q=..." 
+                                            value={displayDoctor?.mapUrl || ''} 
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                if (loggedInProfessionalId) updateActiveProfessional({ mapUrl: val });
+                                                else setLocalDoctor(prev => ({ ...prev, mapUrl: val }));
+                                            }} 
+                                        />
+                                        <div className="w-full h-44 border border-slate-300 rounded overflow-hidden shadow-inner bg-slate-200 mt-2">
+                                            <iframe 
+                                                width="100%" 
+                                                height="100%" 
+                                                style={{ border: 0 }} 
+                                                loading="lazy" 
+                                                allowFullScreen 
+                                                referrerPolicy="no-referrer-when-downgrade"
+                                                src={`https://maps.google.com/maps?q=${encodeURIComponent(([displayDoctor?.address, displayDoctor?.city, displayDoctor?.state].filter(Boolean).join(', ')) || 'Brasil')}&t=&z=15&ie=UTF8&iwloc=&output=embed`}
+                                                title="Pré-visualização do Mapa no Perfil"
+                                            ></iframe>
+                                        </div>
+                                    </div>
                                     
                                     <div className="md:col-span-2 space-y-4">
                                         <div className="flex justify-between items-center"><label className="text-[9px] font-black uppercase tracking-widest text-slate-900">Especialidades</label><button type="button" onClick={() => {
@@ -2111,7 +2273,27 @@
         const AdminDashboard = ({ doctors, setDoctors, onDeleteDoctor, isAuthenticated, onAuthenticate, showNotification, showConfirmation }) => {
             const [password, setPassword] = useState('');
             const [showShareModal, setShowShareModal] = useState(null); // null = none, 'main' = company, doctorId = specific doctor
-            const toggleStatus = (id, currentStatus) => { setDoctors(id, { status: currentStatus === 'active' ? 'suspended' : 'active' }); };
+            
+            const toggleStatus = (id, currentStatus) => { 
+                let newStatus = 'active';
+                if (currentStatus === 'active') {
+                    newStatus = 'suspended';
+                } else if (currentStatus === 'pending') {
+                    newStatus = 'active';
+                } else if (currentStatus === 'suspended') {
+                    newStatus = 'active';
+                }
+                setDoctors(id, { status: newStatus }); 
+                if (currentStatus === 'pending') {
+                    showNotification("Acesso liberado com sucesso! O profissional agora está visível no site.");
+                } else if (newStatus === 'suspended') {
+                    showNotification("Perfil suspenso.");
+                } else {
+                    showNotification("Perfil ativado com sucesso!");
+                }
+            };
+
+            const pendingCount = (doctors || []).filter(d => d.status === 'pending').length;
 
             const handlePasswordSubmit = () => {
                 if (password === ADMIN_PASSWORD) {
@@ -2137,7 +2319,14 @@
             return (
                 <div className="lg:max-w-none mx-auto px-4">
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-10 lg:mb-4">
-                        <h2 className="text-2xl sm:text-3xl lg:text-xl font-black uppercase">Gestão de Profissionais</h2>
+                        <div className="flex items-center gap-3">
+                            <h2 className="text-2xl sm:text-3xl lg:text-xl font-black uppercase">Gestão de Profissionais</h2>
+                            {pendingCount > 0 && (
+                                <span className="px-3 py-1 bg-amber-500 text-white font-black text-[9px] uppercase tracking-widest rounded-full animate-bounce">
+                                    <i className="fas fa-clock mr-1"></i> {pendingCount} PENDENTE{pendingCount > 1 ? 'S' : ''}
+                                </span>
+                            )}
+                        </div>
                         <div className="flex items-center gap-4">
                             <button 
                                 onClick={() => setShowShareModal('main')}
@@ -2171,9 +2360,15 @@
                                         </button>
                                         <button 
                                             onClick={() => toggleStatus(doc.id, doc.status)} 
-                                            className={`px-4 py-2 lg:px-3 lg:py-1 font-black uppercase text-[9px] border-2 transition-all ${doc.status === 'active' ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white text-slate-900 border-slate-100'}`}
+                                            className={`px-4 py-2 lg:px-3 lg:py-1 font-black uppercase text-[9px] border-2 transition-all ${
+                                                doc.status === 'active' 
+                                                    ? 'bg-emerald-500 text-white border-emerald-500' 
+                                                    : doc.status === 'pending'
+                                                    ? 'bg-amber-500 text-white border-amber-500 hover:bg-amber-600 animate-pulse'
+                                                    : 'bg-slate-100 text-slate-700 border-slate-300'
+                                            }`}
                                         >
-                                            {doc.status === 'active' ? 'ATIVO' : 'SUSPENSO'}
+                                            {doc.status === 'active' ? 'ATIVO' : doc.status === 'pending' ? 'LIBERAR ACESSO' : 'SUSPENSO'}
                                         </button>
                                         <button 
                                             onClick={() => { 
