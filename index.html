@@ -773,49 +773,108 @@
             );
         };
 
-        const ConsultAppointments = ({ appointments, onCancel }) => {
+        const ConsultAppointments = ({ appointments, onCancel, showNotification, showConfirmation }) => {
             const [cpf, setCpf] = useState('');
-            const [searchResult, setSearchResult] = useState(null);
-            const handleSearch = () => setSearchResult(appointments.filter(app => app.patientCPF === cpf));
+            const [searchedCpf, setSearchedCpf] = useState(null);
+            const [cancelledNotice, setCancelledNotice] = useState(null);
+
+            const handleSearch = () => {
+                setCancelledNotice(null);
+                setSearchedCpf(cpf.trim());
+            };
+
+            const searchResult = searchedCpf ? appointments.filter(app => app.patientCPF === searchedCpf) : null;
+
+            const handleCancelAppointment = (app) => {
+                const doCancel = async () => {
+                    await onCancel(app.id);
+                    const msg = `Agendamento com ${app.doctorName} (${app.time}) foi cancelado com sucesso.`;
+                    setCancelledNotice(msg);
+                    if (showNotification) {
+                        showNotification('Agendamento cancelado com sucesso!', 'success');
+                    }
+                };
+
+                if (showConfirmation) {
+                    showConfirmation('Tem certeza que deseja cancelar esta consulta?', doCancel);
+                } else if (window.confirm('Tem certeza que deseja cancelar esta consulta?')) {
+                    doCancel();
+                }
+            };
+
             return (
                 <div className="lg:max-w-none mx-auto">
                     <h2 className="text-2xl lg:text-xl font-black uppercase mb-6 lg:mb-4">Suas Consultas</h2>
                     <div className="bg-white border border-slate-200 p-6 lg:p-3 flex flex-col sm:flex-row gap-3 mb-8 lg:mb-4">
-                        <input placeholder="DIGITE SEU CPF" className="flex-1 p-3 lg:p-2 border border-slate-200 font-black uppercase text-[12px] outline-none focus:border-red-600" value={cpf} onChange={(e) => setCpf(e.target.value)} />
+                        <input 
+                            placeholder="DIGITE SEU CPF" 
+                            className="flex-1 p-3 lg:p-2 border border-slate-200 font-black uppercase text-[12px] outline-none focus:border-red-600" 
+                            value={cpf} 
+                            onChange={(e) => setCpf(e.target.value)} 
+                            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                        />
                         <button onClick={handleSearch} className="bg-red-600 text-white px-6 lg:px-4 font-black uppercase text-[12px] hover:bg-red-700 transition-all">BUSCAR</button>
                     </div>
+
+                    {cancelledNotice && (
+                        <div className="bg-emerald-50 border-2 border-emerald-600 p-4 mb-6 flex justify-between items-center animate-slide-up shadow-sm">
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 bg-emerald-600 text-white rounded-full flex items-center justify-center font-black shrink-0 text-sm">
+                                    <i className="fas fa-check"></i>
+                                </div>
+                                <div>
+                                    <p className="text-xs font-black uppercase text-emerald-900">Cancelamento Confirmado</p>
+                                    <p className="text-[11px] font-bold uppercase text-emerald-800 mt-0.5">{cancelledNotice}</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setCancelledNotice(null)} className="text-emerald-800 hover:text-emerald-900 font-black text-sm p-1">
+                                <i className="fas fa-times"></i>
+                            </button>
+                        </div>
+                    )}
+
                     {searchResult && (
                         <div className="space-y-3">
-                            {searchResult.map(app => (
-                                <div key={app.id} className="bg-white border border-slate-200 p-4 lg:p-3 flex justify-between items-center">
-                                    <div>
-                                        <h3 className="font-black uppercase text-xs lg:text-[11px]">{app.doctorName}</h3>
-                                        <p className="text-xs font-bold text-slate-900 uppercase">
-                                            {app.date.includes('-') ? (
-                                                new Date(app.date.split('-')[0], app.date.split('-')[1] - 1, app.date.split('-')[2])
-                                                    .toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'short' })
-                                                    .toUpperCase()
-                                                    .replace('-FEIRA', '')
-                                            ) : app.date} às {app.time}
-                                        </p>
-                                        <div className="flex gap-2 mt-2">
-                                            <span className={`px-2 py-0.5 text-[12px] font-black uppercase rounded ${app.status === 'cancelled' ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'}`}>
-                                                {app.status === 'cancelled' ? 'CANCELADO' : 'CONFIRMADO'}
-                                            </span>
-                                            {app.document && (
-                                                <a 
-                                                    href={app.document.data} 
-                                                    download={app.document.name}
-                                                    className="px-2 py-0.5 bg-white border border-slate-900 text-slate-900 text-[12px] font-black uppercase rounded flex items-center gap-1 hover:bg-red-600 hover:text-white hover:border-red-600 transition-all"
-                                                >
-                                                    <i className="fas fa-download"></i> BAIXAR DOC
-                                                </a>
-                                            )}
+                            {searchResult.length > 0 ? (
+                                searchResult.map(app => (
+                                    <div key={app.id} className="bg-white border border-slate-200 p-4 lg:p-3 flex justify-between items-center">
+                                        <div>
+                                            <h3 className="font-black uppercase text-xs lg:text-[11px]">{app.doctorName}</h3>
+                                            <p className="text-xs font-bold text-slate-900 uppercase">
+                                                {app.date.includes('-') ? (
+                                                    new Date(app.date.split('-')[0], app.date.split('-')[1] - 1, app.date.split('-')[2])
+                                                        .toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'short' })
+                                                        .toUpperCase()
+                                                        .replace('-FEIRA', '')
+                                                ) : app.date} às {app.time}
+                                            </p>
+                                            <div className="flex gap-2 mt-2">
+                                                <span className={`px-2 py-0.5 text-[12px] font-black uppercase rounded ${app.status === 'cancelled' ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                                                    {app.status === 'cancelled' ? 'CANCELADO' : 'CONFIRMADO'}
+                                                </span>
+                                                {app.document && (
+                                                    <a 
+                                                        href={app.document.data} 
+                                                        download={app.document.name}
+                                                        className="px-2 py-0.5 bg-white border border-slate-900 text-slate-900 text-[12px] font-black uppercase rounded flex items-center gap-1 hover:bg-red-600 hover:text-white hover:border-red-600 transition-all"
+                                                    >
+                                                        <i className="fas fa-download"></i> BAIXAR DOC
+                                                    </a>
+                                                )}
+                                            </div>
                                         </div>
+                                        {app.status !== 'cancelled' && (
+                                            <button onClick={() => handleCancelAppointment(app)} className="text-red-600 font-black uppercase text-xs hover:underline">
+                                                CANCELAR
+                                            </button>
+                                        )}
                                     </div>
-                                    {app.status !== 'cancelled' && <button onClick={() => onCancel(app.id)} className="text-red-600 font-black uppercase text-xs">CANCELAR</button>}
-                                </div>
-                            ))}
+                                ))
+                            ) : (
+                                <p className="text-xs font-black text-slate-900 uppercase italic p-6 text-center border border-dashed border-slate-200 bg-white">
+                                    Nenhum agendamento encontrado para este CPF.
+                                </p>
+                            )}
                         </div>
                     )}
                 </div>
@@ -2371,7 +2430,14 @@
                         {currentView === 'home' && <Home doctors={doctors} onSelectDoctor={(id) => navigateTo('doctor_details', {id})} selectedDoctorId={selectedDoctorId} />}
                         <div className={`mx-auto px-4 py-8 lg:py-4 lg:max-w-none ${currentView === 'doctor_details' ? 'lg:max-w-none' : 'lg:max-w-none'}`}>
                             {currentView === 'doctor_details' && selectedDoctor && <DoctorDetails doctor={selectedDoctor} appointments={appointments} onConfirm={handleConfirm} />}
-                            {currentView === 'consult_appointments' && <ConsultAppointments appointments={appointments} onCancel={handleCancel} />}
+                            {currentView === 'consult_appointments' && (
+                                <ConsultAppointments 
+                                    appointments={appointments} 
+                                    onCancel={handleCancel} 
+                                    showNotification={showNotification}
+                                    showConfirmation={showConfirmation}
+                                />
+                            )}
                             {currentView === 'professional_signup' && <ProfessionalSignup onSignup={handleSignup} />}
                             {currentView === 'professional_dashboard' && (
                                 <ProfessionalDashboard 
