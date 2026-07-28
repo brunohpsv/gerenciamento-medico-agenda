@@ -60,7 +60,7 @@ service cloud.firestore {
       return data.keys().hasAll(['id', 'name', 'accessCode', 'status', 'isClinic']) &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              data.accessCode is string && data.accessCode.size() > 0 && data.accessCode.size() < 50 &&
-             data.status in ['active', 'suspended'] &&
+             data.status in ['active', 'pending', 'suspended'] &&
              (
                (data.crm is string && (data.crm.size() > 0 || data.isClinic)) ||
                (data.cnpj is string && (data.cnpj.size() > 0 || !data.isClinic))

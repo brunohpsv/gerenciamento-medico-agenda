@@ -940,31 +940,42 @@
                 const formData = new FormData(e.currentTarget);
                 const isPJ = partnerType === 'pj';
                 const mapUrlValue = formData.get('mapUrl');
-                const fullAddressStr = [formData.get('address'), formData.get('city'), formData.get('state')].filter(Boolean).join(', ');
-                const finalMapUrl = mapUrlValue && mapUrlValue.trim() !== ''
-                    ? mapUrlValue.trim()
+                const addressVal = formData.get('address') || '';
+                const cityVal = formData.get('city') || '';
+                const stateVal = formData.get('state') || '';
+                const fullAddressStr = [addressVal, cityVal, stateVal].filter(Boolean).join(', ');
+                const finalMapUrl = mapUrlValue && String(mapUrlValue).trim() !== ''
+                    ? String(mapUrlValue).trim()
                     : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddressStr)}`;
                 
+                const nameVal = formData.get('name') || '';
+                const crmVal = isPJ ? '' : (formData.get('crm') || '');
+                const cnpjVal = isPJ ? (formData.get('cnpj') || '') : '';
+                const mainSpecVal = formData.get('mainSpecialty') || 'Geral';
+                const bioVal = formData.get('bio') || '';
+                const priceVal = Number(formData.get('price')) || 0;
+                const accessCodeVal = String(formData.get('accessCode') || '').trim().toUpperCase();
+
                 const newDoctor = {
                     id: Math.random().toString(36).substr(2, 9),
-                    name: formData.get('name'),
-                    crm: isPJ ? '' : formData.get('crm'),
-                    cnpj: isPJ ? formData.get('cnpj') : '',
+                    name: nameVal,
+                    crm: crmVal,
+                    cnpj: cnpjVal,
                     type: partnerType, // 'pf' or 'pj'
                     isClinic: isPJ,
-                    specialties: isPJ ? [formData.get('mainSpecialty')] : specialties.filter(s => s.trim() !== ''),
-                    clinics: isPJ ? [formData.get('name')] : clinics.filter(c => c.trim() !== ''),
-                    city: formData.get('city'),
-                    state: formData.get('state'),
-                    address: formData.get('address'),
+                    specialties: isPJ ? [mainSpecVal] : specialties.filter(s => s && s.trim() !== ''),
+                    clinics: isPJ ? [nameVal] : clinics.filter(c => c && c.trim() !== ''),
+                    city: cityVal,
+                    state: stateVal,
+                    address: addressVal,
                     mapUrl: finalMapUrl,
                     onlineConsultation: formData.get('onlineConsultation') === 'on',
                     image: isPJ ? "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&q=80&w=400" : "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=400",
-                    bio: formData.get('bio'),
-                    price: Number(formData.get('price')),
+                    bio: bioVal,
+                    price: priceVal,
                     schedule: generateScheduleFromConfig(DEFAULT_WORK_CONFIG),
                     workConfig: DEFAULT_WORK_CONFIG,
-                    accessCode: formData.get('accessCode').trim().toUpperCase(),
+                    accessCode: accessCodeVal,
                     paymentStatus: "unpaid",
                     status: "pending",
                     createdAt: new Date().toISOString(),
