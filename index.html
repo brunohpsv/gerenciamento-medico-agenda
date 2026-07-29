@@ -1194,10 +1194,10 @@
             }, [activeTab]);
 
             useEffect(() => {
-                if (loggedInDoctor && !localDoctor) {
+                if (loggedInDoctor) {
                     setLocalDoctor(JSON.parse(JSON.stringify(loggedInDoctor)));
                 }
-            }, [loggedInDoctor]);
+            }, [loggedInDoctor, loggedInId, loggedInProfessionalId]);
 
             useEffect(() => {
                 if (loggedInDoctor && loggedInDoctor.isClinic && !loggedInProfessionalId && activeTab === 'appointments') {
@@ -1474,7 +1474,9 @@
             );
 
             const isCompanyView = loggedInDoctor?.isClinic && !loggedInProfessionalId;
-            const activeProfessional = loggedInProfessionalId ? (localDoctor?.professionals || []).find(p => p.id === loggedInProfessionalId) : null;
+            const activeProfessional = loggedInProfessionalId 
+                ? ((localDoctor?.professionals || []).find(p => p.id === loggedInProfessionalId) || (loggedInDoctor?.professionals || []).find(p => p.id === loggedInProfessionalId)) 
+                : null;
             const displayDoctor = activeProfessional || localDoctor || loggedInDoctor;
 
             if (!loggedInDoctor || !localDoctor) return <div className="p-20 text-center font-black uppercase text-slate-900">Carregando painel...</div>;
@@ -1511,12 +1513,17 @@
                 });
             };
 
-            const handleUpdateProfessional = (id, updates) => {
+            const handleUpdateProfessional = async (id, updates) => {
                 if (!localDoctor) return;
-                setLocalDoctor(prev => prev ? ({
-                    ...prev,
-                    professionals: (prev.professionals || []).map(p => p.id === id ? { ...p, ...updates } : p)
-                }) : null);
+                const updatedProfessionals = (localDoctor.professionals || []).map(p => p.id === id ? { ...p, ...updates } : p);
+                const updatedDoctor = { ...localDoctor, professionals: updatedProfessionals };
+                setLocalDoctor(updatedDoctor);
+                try {
+                    const { id: docId, ...dataUpdates } = updatedDoctor;
+                    await setDoctors(docId, dataUpdates);
+                } catch (err) {
+                    console.error("Erro ao atualizar profissional:", err);
+                }
             };
 
             const renderAppointmentCards = (appsList) => {
@@ -1649,7 +1656,17 @@
             };
 
             const cancelledApps = (doctorAppointments || []).filter(app => app && app.status === 'cancelled');
-            const mySupportMessages = (supportMessages || []).filter(m => m && m.doctorId === displayDoctor?.id);
+            const mySupportMessages = (supportMessages || []).filter(m => {
+                if (!m) return false;
+                const isDocMatch = m.doctorId === loggedInId || m.doctorId === displayDoctor?.id;
+                if (!isDocMatch) return false;
+
+                if (loggedInProfessionalId) {
+                    return m.professionalId === loggedInProfessionalId || m.doctorId === loggedInProfessionalId;
+                } else {
+                    return !m.professionalId || m.doctorId === loggedInId;
+                }
+            });
 
             const tabs = [
                 ...(isCompanyView ? [{ id: 'professionals', label: 'PROFISSIONAIS', icon: 'fa-users' }] : []),
@@ -1680,8 +1697,8 @@
                         <div className="flex flex-col sm:flex-row items-center gap-6 lg:gap-3 text-center sm:text-left">
                             <div className="relative group shrink-0">
                                 <div className="w-20 h-20 lg:w-14 lg:h-14 border-2 border-slate-200 overflow-hidden bg-slate-100">
-                                    {(activeProfessional?.image || displayDoctor.image) ? (
-                                        <img src={activeProfessional?.image || displayDoctor.image} className="w-full h-full object-cover" alt={displayDoctor.name} referrerPolicy="no-referrer" />
+                                    {displayDoctor?.image ? (
+                                        <img src={displayDoctor.image} className="w-full h-full object-cover" alt={displayDoctor.name} referrerPolicy="no-referrer" />
                                     ) : (
                                         <div className="w-full h-full flex items-center justify-center text-slate-900"><i className="fas fa-user text-2xl"></i></div>
                                     )}
@@ -1960,8 +1977,11 @@
                                                 onClick={() => {
                                                     if (onSendSupportMessage && displayDoctor) {
                                                         onSendSupportMessage({
-                                                            doctorId: displayDoctor.id,
-                                                            doctorName: displayDoctor.name,
+                                                            doctorId: loggedInId,
+                                                            professionalId: loggedInProfessionalId || null,
+                                                            doctorName: loggedInProfessionalId 
+                                                                ? `${localDoctor?.name || loggedInDoctor?.name} - ${activeProfessional?.name}` 
+                                                                : displayDoctor.name,
                                                             senderType: 'professional',
                                                             text: q
                                                         });
@@ -1979,8 +1999,11 @@
                                         if (!chatInput.trim()) return;
                                         if (onSendSupportMessage && displayDoctor) {
                                             onSendSupportMessage({
-                                                doctorId: displayDoctor.id,
-                                                doctorName: displayDoctor.name,
+                                                doctorId: loggedInId,
+                                                professionalId: loggedInProfessionalId || null,
+                                                doctorName: loggedInProfessionalId 
+                                                    ? `${localDoctor?.name || loggedInDoctor?.name} - ${activeProfessional?.name}` 
+                                                    : displayDoctor.name,
                                                 senderType: 'professional',
                                                 text: chatInput.trim()
                                             });
@@ -3041,7 +3064,7 @@
                                                                 <div key={msg.id} className={`flex flex-col ${isAdmin ? 'items-end' : 'items-start'}`}>
                                                                     <div className="flex items-center gap-2 mb-1">
                                                                         <span className="text-[9px] font-black uppercase text-slate-500">
-                                                                            {isAdmin ? 'Você (Suporte Admin)' : activeDoc.name}
+                                                                            {isAdmin ? 'Você (Suporte Admin)' : (msg.doctorName || activeDoc.name)}
                                                                         </span>
                                                                         <span className="text-[8px] font-medium text-slate-400">
                                                                             {msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
@@ -3072,8 +3095,10 @@
                                                             key={resp}
                                                             onClick={() => {
                                                                 if (onSendSupportMessage && activeDoc) {
+                                                                    const lastProfMsg = [...activeMsgs].reverse().find(m => m.senderType === 'professional' && m.professionalId);
                                                                     onSendSupportMessage({
                                                                         doctorId: activeDoc.id,
+                                                                        professionalId: lastProfMsg?.professionalId || null,
                                                                         doctorName: activeDoc.name,
                                                                         senderType: 'admin',
                                                                         text: resp
@@ -3091,8 +3116,10 @@
                                                     e.preventDefault();
                                                     if (!adminChatInput.trim()) return;
                                                     if (onSendSupportMessage && activeDoc) {
+                                                        const lastProfMsg = [...activeMsgs].reverse().find(m => m.senderType === 'professional' && m.professionalId);
                                                         onSendSupportMessage({
                                                             doctorId: activeDoc.id,
+                                                            professionalId: lastProfMsg?.professionalId || null,
                                                             doctorName: activeDoc.name,
                                                             senderType: 'admin',
                                                             text: adminChatInput.trim()
