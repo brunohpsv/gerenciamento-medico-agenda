@@ -1125,7 +1125,7 @@
             );
         };
 
-        const ProfessionalDashboard = ({ doctors, appointments, setDoctors, loggedInId, loggedInProfessionalId, onLogin, onLogout, onCancelAppointment, onUpdateAppointment, showNotification, showConfirmation }) => {
+        const ProfessionalDashboard = ({ doctors, appointments, setDoctors, loggedInId, loggedInProfessionalId, onLogin, onLogout, onCancelAppointment, onUpdateAppointment, supportMessages = [], onSendSupportMessage, showNotification, showConfirmation }) => {
             const formatDateLong = (dateStr) => {
                 if (!dateStr) return 'DATA INVÁLIDA';
                 if (!dateStr.includes('-')) {
@@ -1151,6 +1151,7 @@
             const [loginStep, setLoginStep] = useState('password'); // 'password', 'select_prof'
             const [tempClinic, setTempClinic] = useState(null);
             const [activeTab, setActiveTab] = useState('appointments');
+            const [chatInput, setChatInput] = useState('');
             const [localDoctor, setLocalDoctor] = useState(null);
             const [isGroupingOpen, setIsGroupingOpen] = useState(false);
             const [selectedGroupingTimes, setSelectedGroupingTimes] = useState(['all']);
@@ -1621,9 +1622,14 @@
                 );
             };
 
+            const cancelledApps = (doctorAppointments || []).filter(app => app && app.status === 'cancelled');
+            const mySupportMessages = (supportMessages || []).filter(m => m && m.doctorId === displayDoctor?.id);
+
             const tabs = [
                 ...(isCompanyView ? [{ id: 'professionals', label: 'PROFISSIONAIS', icon: 'fa-users' }] : []),
                 { id: 'appointments', label: 'AGENDA', icon: 'fa-calendar' },
+                { id: 'notifications', label: `NOTIFICAÇÕES${cancelledApps.length > 0 ? ` (${cancelledApps.length})` : ''}`, icon: 'fa-bell' },
+                { id: 'chat', label: `SUPORTE / CHAT${mySupportMessages.length > 0 ? ` (${mySupportMessages.length})` : ''}`, icon: 'fa-comments' },
                 { id: 'profile', label: 'PERFIL', icon: 'fa-user' },
                 { id: 'schedule', label: 'CONFIGURAÇÃO', icon: 'fa-cog' },
                 { id: 'share', label: 'COMPARTILHAR', icon: 'fa-share-alt' }
@@ -1684,6 +1690,16 @@
                             </div>
                         </div>
                         <div className="flex flex-wrap items-center justify-center md:justify-end gap-3 mt-8 md:mt-0">
+                            {cancelledApps.length > 0 && (
+                                <button 
+                                    onClick={() => setActiveTab('notifications')}
+                                    className="px-4 py-3 bg-red-100 border border-red-300 text-red-700 text-xs font-black uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all flex items-center gap-2 shadow-sm"
+                                    title="Ver Notificações de Cancelamento"
+                                >
+                                    <i className="fas fa-bell text-red-600"></i> NOTIFICAÇÕES
+                                    <span className="bg-red-600 text-white font-black text-[10px] px-2 py-0.5 rounded-full animate-pulse">{cancelledApps.length}</span>
+                                </button>
+                            )}
                             {loggedInProfessionalId && (
                                 <button 
                                     onClick={() => onLogin(loggedInId)} 
@@ -1762,6 +1778,188 @@
                                 ) : (
                                     renderAppointmentCards(doctorAppointments)
                                 )}
+                            </div>
+                        )}
+                        {activeTab === 'notifications' && (
+                            <div className="space-y-6">
+                                <div className="flex items-center justify-between border-b pb-4">
+                                    <div>
+                                        <h3 className="text-lg font-black uppercase tracking-tighter flex items-center gap-2 text-slate-900">
+                                            <i className="fas fa-bell text-red-600"></i> Central de Notificações
+                                        </h3>
+                                        <p className="text-xs font-bold text-slate-500 uppercase mt-1">
+                                            Agendamentos que foram cancelados por pacientes
+                                        </p>
+                                    </div>
+                                    <span className="px-4 py-2 bg-red-100 text-red-700 font-black text-xs uppercase rounded-full">
+                                        {cancelledApps.length} CANCELAMENTO{cancelledApps.length === 1 ? '' : 'S'}
+                                    </span>
+                                </div>
+
+                                {cancelledApps.length === 0 ? (
+                                    <div className="p-12 text-center bg-slate-50 border border-slate-200 text-xs font-black uppercase text-slate-500 space-y-2">
+                                        <i className="fas fa-check-circle text-3xl text-emerald-500 block"></i>
+                                        <p>Nenhuma notificação de cancelamento no momento.</p>
+                                        <p className="text-[10px] text-slate-400 font-bold">Todas as suas consultas agendadas estão ativas!</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        {cancelledApps.map(app => {
+                                            const cleanPhone = app.patientPhone ? app.patientPhone.replace(/\D/g, '') : '';
+                                            return (
+                                                <div key={`notif-cancel-${app.id}`} className="bg-white border-2 border-red-200 p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-sm hover:border-red-600 transition-colors">
+                                                    <div className="flex items-start gap-4">
+                                                        <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center font-black text-xl shrink-0">
+                                                            <i className="fas fa-calendar-times"></i>
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="px-2.5 py-0.5 bg-red-600 text-white font-black text-[9px] uppercase tracking-widest rounded">
+                                                                    CANCELADO PELO PACIENTE
+                                                                </span>
+                                                                <span className="text-[10px] font-bold text-slate-500 uppercase">
+                                                                    ID: #{app.id}
+                                                                </span>
+                                                            </div>
+                                                            <h4 className="font-black uppercase text-sm text-slate-900">
+                                                                Paciente: {app.patientName}
+                                                            </h4>
+                                                            <p className="text-xs font-bold text-slate-700 uppercase">
+                                                                <i className="far fa-clock mr-1 text-red-600"></i>
+                                                                Horário: <strong>{app.date} às {app.time}</strong>
+                                                            </p>
+                                                            <p className="text-[10px] font-bold text-slate-500 uppercase">
+                                                                CPF: {app.patientCPF || 'N/A'} • Tel: {app.patientPhone || 'Não informado'} • Valor: R$ {app.price || '0'}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="flex flex-wrap items-center gap-3 shrink-0 self-end md:self-center">
+                                                        {cleanPhone && (
+                                                            <a 
+                                                                href={`https://wa.me/55${cleanPhone}?text=${encodeURIComponent(`Olá ${app.patientName}, vi que sua consulta no dia ${app.date} às ${app.time} no MedAgendar foi cancelada. Gostaria de remarcar?`)}`}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="px-4 py-2.5 bg-emerald-600 text-white font-black uppercase text-[10px] tracking-wider hover:bg-emerald-700 transition-all flex items-center gap-2 shadow-sm"
+                                                            >
+                                                                <i className="fab fa-whatsapp text-sm"></i> CONTATAR VIA WHATSAPP
+                                                            </a>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        {activeTab === 'chat' && (
+                            <div className="space-y-6">
+                                <div className="flex items-center justify-between border-b pb-4">
+                                    <div>
+                                        <h3 className="text-lg font-black uppercase tracking-tighter flex items-center gap-2 text-slate-900">
+                                            <i className="fas fa-headset text-red-600"></i> Chat de Suporte MedAgendar
+                                        </h3>
+                                        <p className="text-xs font-bold text-slate-500 uppercase mt-1">
+                                            Canal de comunicação ao vivo com a equipe de administração do sistema.
+                                        </p>
+                                    </div>
+                                    <span className="px-3 py-1 bg-emerald-100 text-emerald-800 font-black text-[10px] uppercase tracking-widest rounded-full flex items-center gap-1.5">
+                                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                                        SUPORTE ONLINE
+                                    </span>
+                                </div>
+
+                                <div className="bg-slate-50 border-2 border-slate-200 rounded-lg overflow-hidden flex flex-col h-[500px]">
+                                    <div className="flex-1 p-6 overflow-y-auto space-y-4 bg-slate-100">
+                                        {mySupportMessages.length === 0 ? (
+                                            <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-3">
+                                                <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center text-2xl">
+                                                    <i className="fas fa-comments"></i>
+                                                </div>
+                                                <h4 className="font-black uppercase text-xs text-slate-900">Inicie uma conversa com o Suporte</h4>
+                                                <p className="text-[11px] font-bold text-slate-500 uppercase max-w-sm">
+                                                    Envie uma mensagem abaixo se precisar de ajuda com seu cadastro, liberação de acesso, horários ou pagamentos!
+                                                </p>
+                                            </div>
+                                        ) : (
+                                            mySupportMessages.map(msg => {
+                                                const isProf = msg.senderType === 'professional';
+                                                return (
+                                                    <div key={msg.id} className={`flex flex-col ${isProf ? 'items-end' : 'items-start'}`}>
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <span className="text-[9px] font-black uppercase text-slate-500">
+                                                                {isProf ? 'Você' : 'Suporte Administrativo'}
+                                                            </span>
+                                                            <span className="text-[8px] font-medium text-slate-400">
+                                                                {msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                                            </span>
+                                                        </div>
+                                                        <div className={`max-w-md p-4 rounded-xl text-xs font-bold leading-relaxed shadow-sm ${
+                                                            isProf 
+                                                                ? 'bg-red-600 text-white rounded-tr-none' 
+                                                                : 'bg-white text-slate-900 border border-slate-200 rounded-tl-none'
+                                                        }`}>
+                                                            {msg.text}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })
+                                        )}
+                                    </div>
+
+                                    <div className="p-3 bg-white border-t border-slate-200 flex flex-wrap gap-2 overflow-x-auto">
+                                        <span className="text-[9px] font-black uppercase text-slate-400 self-center">Perguntas Rápidas:</span>
+                                        {[
+                                            "Meu perfil já está liberado?",
+                                            "Como funciona a configuração de horários?",
+                                            "Preciso alterar meus dados cadastrais",
+                                            "Dúvidas sobre o funcionamento do agendamento"
+                                        ].map(q => (
+                                            <button 
+                                                key={q}
+                                                onClick={() => {
+                                                    if (onSendSupportMessage && displayDoctor) {
+                                                        onSendSupportMessage({
+                                                            doctorId: displayDoctor.id,
+                                                            doctorName: displayDoctor.name,
+                                                            senderType: 'professional',
+                                                            text: q
+                                                        });
+                                                    }
+                                                }}
+                                                className="px-3 py-1 bg-slate-100 hover:bg-red-50 hover:text-red-600 border border-slate-200 font-bold text-[9px] uppercase tracking-wider transition-all"
+                                            >
+                                                {q}
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    <form onSubmit={(e) => {
+                                        e.preventDefault();
+                                        if (!chatInput.trim()) return;
+                                        if (onSendSupportMessage && displayDoctor) {
+                                            onSendSupportMessage({
+                                                doctorId: displayDoctor.id,
+                                                doctorName: displayDoctor.name,
+                                                senderType: 'professional',
+                                                text: chatInput.trim()
+                                            });
+                                            setChatInput('');
+                                        }
+                                    }} className="p-4 bg-white border-t border-slate-200 flex gap-3">
+                                        <input 
+                                            type="text"
+                                            value={chatInput}
+                                            onChange={(e) => setChatInput(e.target.value)}
+                                            placeholder="DIGITE SUA MENSAGEM PARA O SUPORTE..."
+                                            className="flex-1 p-3 border border-slate-200 font-black text-xs outline-none focus:border-red-600"
+                                        />
+                                        <button type="submit" className="px-6 py-3 bg-red-600 text-white font-black uppercase text-xs tracking-widest hover:bg-red-700 transition-all flex items-center gap-2">
+                                            <i className="fas fa-paper-plane"></i> ENVIAR
+                                        </button>
+                                    </form>
+                                </div>
                             </div>
                         )}
                         {activeTab === 'profile' && (
@@ -2282,11 +2480,13 @@
             );
         };
 
-        const AdminDashboard = ({ doctors, setDoctors, onDeleteDoctor, appointments = [], onUpdateAppointment, isAuthenticated, onAuthenticate, showNotification, showConfirmation }) => {
+        const AdminDashboard = ({ doctors, setDoctors, onDeleteDoctor, appointments = [], onUpdateAppointment, supportMessages = [], onSendSupportMessage, isAuthenticated, onAuthenticate, showNotification, showConfirmation }) => {
             const [password, setPassword] = useState('');
             const [showShareModal, setShowShareModal] = useState(null); // null = none, 'main' = company, doctorId = specific doctor
             const [statusFilter, setStatusFilter] = useState('all'); // 'all', 'active', 'suspended', 'pending'
-            const [adminTab, setAdminTab] = useState('partners'); // 'partners', 'attachments'
+            const [adminTab, setAdminTab] = useState('partners'); // 'partners', 'attachments', 'chat'
+            const [selectedChatDoctorId, setSelectedChatDoctorId] = useState(null);
+            const [adminChatInput, setAdminChatInput] = useState('');
             const [editingPasswords, setEditingPasswords] = useState({});
             const [showPasswords, setShowPasswords] = useState({});
             
@@ -2380,6 +2580,12 @@
                             className={`px-6 py-3 font-black uppercase text-xs tracking-widest border-b-4 transition-all flex items-center gap-2 ${adminTab === 'attachments' ? 'border-red-600 text-red-600 bg-red-50/50' : 'border-transparent text-slate-500 hover:text-slate-900'}`}
                         >
                             <i className="fas fa-paperclip"></i> TODOS OS ANEXOS DO SITE ({totalAttachmentsCount})
+                        </button>
+                        <button 
+                            onClick={() => setAdminTab('chat')}
+                            className={`px-6 py-3 font-black uppercase text-xs tracking-widest border-b-4 transition-all flex items-center gap-2 ${adminTab === 'chat' ? 'border-red-600 text-red-600 bg-red-50/50' : 'border-transparent text-slate-500 hover:text-slate-900'}`}
+                        >
+                            <i className="fas fa-comments text-red-600"></i> CHAT DE SUPORTE AO VIVO ({(supportMessages || []).length})
                         </button>
                     </div>
 
@@ -2629,6 +2835,178 @@
                         </div>
                     )}
 
+                    {adminTab === 'chat' && (
+                        <div className="space-y-6">
+                            <div className="bg-slate-50 border border-slate-200 p-4 flex items-center justify-between">
+                                <span className="text-xs font-black uppercase text-slate-700 flex items-center gap-2">
+                                    <i className="fas fa-headset text-red-600"></i>
+                                    Central de Atendimento e Suporte em Tempo Real
+                                </span>
+                                <span className="text-[10px] font-black uppercase bg-slate-900 text-white px-3 py-1">
+                                    {(supportMessages || []).length} MENSAGEM{(supportMessages || []).length === 1 ? '' : 'NS'} NO TOTAL
+                                </span>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-[550px] bg-white border border-slate-200 overflow-hidden shadow-sm">
+                                {/* Lista de Profissionais */}
+                                <div className="border-r border-slate-200 overflow-y-auto bg-slate-50 p-4 space-y-2">
+                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3 px-2">Profissionais Cadastrados</h4>
+                                    {(doctors || []).map(doc => {
+                                        const docMsgs = (supportMessages || []).filter(m => m.doctorId === doc.id);
+                                        const lastMsg = docMsgs[docMsgs.length - 1];
+                                        const isSelected = selectedChatDoctorId === doc.id;
+                                        return (
+                                            <button
+                                                key={doc.id}
+                                                onClick={() => setSelectedChatDoctorId(doc.id)}
+                                                className={`w-full p-3 text-left border transition-all flex items-center gap-3 ${
+                                                    isSelected 
+                                                        ? 'bg-red-600 text-white border-red-600 shadow-sm' 
+                                                        : 'bg-white text-slate-900 border-slate-200 hover:border-slate-400'
+                                                }`}
+                                            >
+                                                <img src={doc.image} className="w-9 h-9 object-cover border border-slate-300 shrink-0" alt={doc.name} referrerPolicy="no-referrer" />
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center justify-between">
+                                                        <h5 className="font-black uppercase text-xs truncate">{doc.name}</h5>
+                                                        {docMsgs.length > 0 && (
+                                                            <span className={`px-1.5 py-0.5 text-[8px] font-black rounded ${isSelected ? 'bg-white text-red-600' : 'bg-red-100 text-red-600'}`}>
+                                                                {docMsgs.length}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <p className={`text-[9px] font-bold uppercase truncate ${isSelected ? 'text-white/80' : 'text-slate-500'}`}>
+                                                        {lastMsg ? lastMsg.text : (doc.isClinic ? 'Clínica' : 'Profissional')}
+                                                    </p>
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* Janela do Chat */}
+                                <div className="md:col-span-2 flex flex-col h-full bg-white">
+                                    {selectedChatDoctorId ? (() => {
+                                        const activeDoc = (doctors || []).find(d => d.id === selectedChatDoctorId);
+                                        const activeMsgs = (supportMessages || []).filter(m => m.doctorId === selectedChatDoctorId);
+                                        if (!activeDoc) return null;
+                                        return (
+                                            <>
+                                                <div className="p-4 bg-slate-900 text-white flex justify-between items-center shrink-0">
+                                                    <div className="flex items-center gap-3">
+                                                        <img src={activeDoc.image} className="w-9 h-9 object-cover border border-slate-700" alt={activeDoc.name} referrerPolicy="no-referrer" />
+                                                        <div>
+                                                            <h4 className="font-black uppercase text-xs">{activeDoc.name}</h4>
+                                                            <p className="text-[9px] font-bold text-slate-400 uppercase">
+                                                                {activeDoc.isClinic ? `CNPJ: ${activeDoc.cnpj || 'N/A'}` : `CRM: ${activeDoc.crm || 'N/A'}`} {activeDoc.email ? `• ${activeDoc.email}` : ''}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <span className={`px-2 py-1 text-[8px] font-black uppercase ${activeDoc.status === 'active' ? 'bg-emerald-500 text-white' : activeDoc.status === 'pending' ? 'bg-amber-500 text-white' : 'bg-slate-700 text-slate-300'}`}>
+                                                        {activeDoc.status === 'active' ? 'ATIVO' : activeDoc.status === 'pending' ? 'PENDENTE' : 'SUSPENSO'}
+                                                    </span>
+                                                </div>
+
+                                                <div className="flex-1 p-6 overflow-y-auto space-y-4 bg-slate-50">
+                                                    {activeMsgs.length === 0 ? (
+                                                        <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-2 text-slate-400">
+                                                            <i className="fas fa-comments text-3xl"></i>
+                                                            <p className="font-black text-xs uppercase">Nenhuma mensagem trocada ainda com este profissional.</p>
+                                                            <p className="text-[10px] font-bold uppercase">Envie uma mensagem abaixo para iniciar a conversa.</p>
+                                                        </div>
+                                                    ) : (
+                                                        activeMsgs.map(msg => {
+                                                            const isAdmin = msg.senderType === 'admin';
+                                                            return (
+                                                                <div key={msg.id} className={`flex flex-col ${isAdmin ? 'items-end' : 'items-start'}`}>
+                                                                    <div className="flex items-center gap-2 mb-1">
+                                                                        <span className="text-[9px] font-black uppercase text-slate-500">
+                                                                            {isAdmin ? 'Você (Suporte Admin)' : activeDoc.name}
+                                                                        </span>
+                                                                        <span className="text-[8px] font-medium text-slate-400">
+                                                                            {msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className={`max-w-md p-4 rounded-xl text-xs font-bold leading-relaxed shadow-sm ${
+                                                                        isAdmin 
+                                                                            ? 'bg-slate-900 text-white rounded-tr-none' 
+                                                                            : 'bg-white text-slate-900 border border-slate-200 rounded-tl-none'
+                                                                    }`}>
+                                                                        {msg.text}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })
+                                                    )}
+                                                </div>
+
+                                                <div className="p-3 bg-white border-t border-slate-200 flex flex-wrap gap-2 overflow-x-auto">
+                                                    <span className="text-[9px] font-black uppercase text-slate-400 self-center">Respostas Rápidas:</span>
+                                                    {[
+                                                        "Olá! Seu cadastro foi liberado e está ativo no site.",
+                                                        "Como posso te ajudar hoje?",
+                                                        "Por favor, verifique se seus dados e foto no perfil estão corretos.",
+                                                        "Agradecemos o contato! Qualquer dúvida estamos à disposição."
+                                                    ].map(resp => (
+                                                        <button
+                                                            key={resp}
+                                                            onClick={() => {
+                                                                if (onSendSupportMessage && activeDoc) {
+                                                                    onSendSupportMessage({
+                                                                        doctorId: activeDoc.id,
+                                                                        doctorName: activeDoc.name,
+                                                                        senderType: 'admin',
+                                                                        text: resp
+                                                                    });
+                                                                }
+                                                            }}
+                                                            className="px-3 py-1 bg-slate-100 hover:bg-slate-900 hover:text-white border border-slate-200 font-bold text-[9px] uppercase tracking-wider transition-all"
+                                                        >
+                                                            {resp}
+                                                        </button>
+                                                    ))}
+                                                </div>
+
+                                                <form onSubmit={(e) => {
+                                                    e.preventDefault();
+                                                    if (!adminChatInput.trim()) return;
+                                                    if (onSendSupportMessage && activeDoc) {
+                                                        onSendSupportMessage({
+                                                            doctorId: activeDoc.id,
+                                                            doctorName: activeDoc.name,
+                                                            senderType: 'admin',
+                                                            text: adminChatInput.trim()
+                                                        });
+                                                        setAdminChatInput('');
+                                                    }
+                                                }} className="p-4 bg-white border-t border-slate-200 flex gap-3">
+                                                    <input
+                                                        type="text"
+                                                        value={adminChatInput}
+                                                        onChange={(e) => setAdminChatInput(e.target.value)}
+                                                        placeholder="DIGITE UMA RESPOSTA COMO ADMINISTRADOR..."
+                                                        className="flex-1 p-3 border border-slate-200 font-black text-xs outline-none focus:border-red-600"
+                                                    />
+                                                    <button type="submit" className="px-6 py-3 bg-slate-900 text-white font-black uppercase text-xs tracking-widest hover:bg-red-600 transition-all flex items-center gap-2">
+                                                        <i className="fas fa-paper-plane"></i> RESPONDER
+                                                    </button>
+                                                </form>
+                                            </>
+                                        );
+                                    })() : (
+                                        <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-3 bg-slate-50 text-slate-400">
+                                            <i className="fas fa-headset text-4xl"></i>
+                                            <h4 className="font-black uppercase text-xs text-slate-700">Selecione um Profissional</h4>
+                                            <p className="text-[10px] font-bold uppercase max-w-xs">
+                                                Escolha um profissional da lista ao lado para conversar em tempo real.
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Modal de Compartilhamento */}
                     {showShareModal && (
                         <div className="fixed inset-0 bg-white/90 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -2679,6 +3057,7 @@
         const App = () => {
             const [doctors, setDoctors] = useState([]);
             const [appointments, setAppointments] = useState([]);
+            const [supportMessages, setSupportMessages] = useState([]);
             const [currentView, setCurrentView] = useState('home');
             const [selectedDoctorId, setSelectedDoctorId] = useState(null);
             const [loggedInDoctorId, setLoggedInDoctorId] = useState(null);
@@ -2773,9 +3152,19 @@
                     handleFirestoreError(error, OperationType.LIST, 'appointments');
                 });
 
+                const qSupport = collection(db, 'support_messages');
+                const unsubscribeSupport = onSnapshot(qSupport, (snapshot) => {
+                    const msgs = snapshot.docs.map(d => ({ ...d.data(), id: d.id }));
+                    msgs.sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+                    setSupportMessages(msgs);
+                }, (error) => {
+                    console.error("Error loading support messages:", error);
+                });
+
                 return () => {
                     unsubscribeDoctors();
                     unsubscribeAppointments();
+                    unsubscribeSupport();
                 };
             }, []);
 
@@ -2861,6 +3250,19 @@
                 }
             };
 
+            const handleSendSupportMessage = async (msgData) => {
+                try {
+                    const newMsgRef = doc(collection(db, 'support_messages'));
+                    await setDoc(newMsgRef, {
+                        ...msgData,
+                        id: newMsgRef.id,
+                        createdAt: new Date().toISOString()
+                    });
+                } catch (e) {
+                    handleFirestoreError(e, OperationType.WRITE, 'support_messages');
+                }
+            };
+
             const selectedDoctor = doctors.find(d => d.id === selectedDoctorId);
 
             return (
@@ -2884,6 +3286,8 @@
                                     doctors={doctors} 
                                     appointments={appointments} 
                                     setDoctors={handleUpdateDoctor} 
+                                    supportMessages={supportMessages}
+                                    onSendSupportMessage={handleSendSupportMessage}
                                     loggedInId={loggedInDoctorId} 
                                     loggedInProfessionalId={loggedInProfessionalId}
                                     onLogin={(id, profId) => { setLoggedInDoctorId(id); setLoggedInProfessionalId(profId || null); }} 
@@ -2901,6 +3305,8 @@
                                     onDeleteDoctor={handleDeleteDoctor} 
                                     appointments={appointments}
                                     onUpdateAppointment={handleUpdateAppointment}
+                                    supportMessages={supportMessages}
+                                    onSendSupportMessage={handleSendSupportMessage}
                                     isAuthenticated={isAdminAuthenticated} 
                                     onAuthenticate={handleAdminAuth} 
                                     showNotification={showNotification} 
