@@ -235,40 +235,45 @@
         };
 
         const generateScheduleFromConfig = (config) => {
+            if (!config || !config.daysOfWeek) return [];
             const schedule = [];
             const today = new Date();
-            for (let i = 0; i < 14; i++) {
+            for (let i = 0; i < 30; i++) {
                 const currentDate = new Date(today);
                 currentDate.setDate(today.getDate() + i);
                 const dayOfWeek = currentDate.getDay();
                 if (config.daysOfWeek.includes(dayOfWeek)) {
                     const slots = [];
-                    let currentMin = timeToMin(config.startTime);
-                    const endMin = timeToMin(config.endTime);
-                    const duration = config.slotDuration;
-                    const interval = config.minInterval || 0;
+                    let currentMin = timeToMin(config.startTime || "08:00");
+                    const endMin = timeToMin(config.endTime || "18:00");
+                    const duration = Number(config.slotDuration) || 30;
+                    const interval = Number(config.minInterval) || 0;
+                    
                     while (currentMin + duration <= endMin) {
                         const slotStart = currentMin;
                         const slotEnd = currentMin + duration;
                         let isDuringBreak = false;
                         if (config.breaks?.lunch?.active) {
-                            const lStart = timeToMin(config.breaks.lunch.start);
-                            const lEnd = timeToMin(config.breaks.lunch.end);
+                            const lStart = timeToMin(config.breaks.lunch.start || "12:00");
+                            const lEnd = timeToMin(config.breaks.lunch.end || "13:30");
                             if (!(slotEnd <= lStart || slotStart >= lEnd)) isDuringBreak = true;
                         }
                         if (config.breaks?.snack?.active) {
-                            const sStart = timeToMin(config.breaks.snack.start);
-                            const sEnd = timeToMin(config.breaks.snack.end);
+                            const sStart = timeToMin(config.breaks.snack.start || "16:00");
+                            const sEnd = timeToMin(config.breaks.snack.end || "16:30");
                             if (!(slotEnd <= sStart || slotStart >= sEnd)) isDuringBreak = true;
                         }
                         if (!isDuringBreak) slots.push(minToTime(currentMin));
                         currentMin += duration + interval;
                     }
                     if (slots.length > 0) {
-                        const dateStr = currentDate.toISOString().split('T')[0];
-                        const labels = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
-                        const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-                        const label = `${labels[dayOfWeek]}, ${currentDate.getDate()} ${months[currentDate.getMonth()]}`;
+                        const year = currentDate.getFullYear();
+                        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+                        const dayNum = String(currentDate.getDate()).padStart(2, '0');
+                        const dateStr = `${year}-${month}-${dayNum}`;
+                        const labels = ['DOMINGO', 'SEGUNDA', 'TERÇA', 'QUARTA', 'QUINTA', 'SEXTA', 'SÁBADO'];
+                        const months = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
+                        const label = `${labels[dayOfWeek]}, ${dayNum} ${months[currentDate.getMonth()]}`;
                         schedule.push({ date: dateStr, label: label, slots: slots });
                     }
                 }
@@ -530,20 +535,33 @@
             const [selectedProfessionalId, setSelectedProfessionalId] = useState("");
             const [patientData, setPatientData] = useState({ name: '', phone: '', cpf: '' });
 
-            useEffect(() => {
-                if (doctor && doctor.schedule && doctor.schedule.length > 0) {
-                    setSelectedDayDate(doctor.schedule[0].date);
-                }
-            }, [doctor]);
-
             const selectedProfessional = useMemo(() => {
                 if (!doctor.isClinic || !selectedProfessionalId) return null;
                 return (doctor.professionals || []).find(p => p.id === selectedProfessionalId);
             }, [doctor, selectedProfessionalId]);
 
-            const activeSchedule = selectedProfessional ? selectedProfessional.schedule : doctor.schedule;
-            const activeWorkConfig = selectedProfessional ? selectedProfessional.workConfig : doctor.workConfig;
+            const activeWorkConfig = (selectedProfessional ? selectedProfessional.workConfig : doctor.workConfig) || DEFAULT_WORK_CONFIG;
             const activeMaxSlots = selectedProfessional ? selectedProfessional.maxSlotsPerTime : doctor.maxSlotsPerTime;
+
+            const activeSchedule = useMemo(() => {
+                const rawSchedule = (selectedProfessional ? selectedProfessional.schedule : doctor.schedule) || [];
+                const daysOfWeek = activeWorkConfig?.daysOfWeek || [1, 2, 3, 4, 5];
+                return rawSchedule.filter(day => {
+                    if (!day.date || !day.slots || day.slots.length === 0) return false;
+                    const dateObj = new Date(day.date + 'T12:00:00');
+                    return daysOfWeek.includes(dateObj.getDay());
+                });
+            }, [doctor, selectedProfessional, activeWorkConfig]);
+
+            useEffect(() => {
+                if (activeSchedule && activeSchedule.length > 0) {
+                    if (!activeSchedule.some(d => d.date === selectedDayDate)) {
+                        setSelectedDayDate(activeSchedule[0].date);
+                    }
+                } else {
+                    setSelectedDayDate("");
+                }
+            }, [activeSchedule, selectedDayDate]);
 
             const availableSlots = useMemo(() => {
                 if (!activeSchedule) return [];
@@ -1203,9 +1221,19 @@
             const saveProfile = async () => {
                 if (localDoctor) {
                     try {
-                        const { id, ...updates } = localDoctor;
+                        let updatedDoctor = { ...localDoctor };
+                        if (updatedDoctor.isClinic && updatedDoctor.professionals) {
+                            updatedDoctor.professionals = updatedDoctor.professionals.map(p => ({
+                                ...p,
+                                schedule: generateScheduleFromConfig(p.workConfig || DEFAULT_WORK_CONFIG)
+                            }));
+                        }
+                        updatedDoctor.schedule = generateScheduleFromConfig(updatedDoctor.workConfig || DEFAULT_WORK_CONFIG);
+
+                        setLocalDoctor(updatedDoctor);
+                        const { id, ...updates } = updatedDoctor;
                         await setDoctors(id, updates);
-                        showNotification("Perfil atualizado com sucesso!");
+                        showNotification("Perfil e agenda atualizados com sucesso!");
                     } catch (e) {
                         showNotification("Erro ao salvar perfil. Verifique sua conexão.", "error");
                     }
@@ -1310,7 +1338,7 @@
                 
                 // Regenerate schedule automatically
                 const updatedTarget = { ...target, ...updates };
-                const newSchedule = generateSchedule(updatedTarget);
+                const newSchedule = generateScheduleFromConfig(updatedTarget.workConfig);
                 const finalUpdates = { ...updates, schedule: newSchedule };
 
                 // Update local state and Firestore
@@ -1382,50 +1410,27 @@
                 return slots;
             };
 
-            const generateSchedule = (target) => {
-                const config = target.workConfig;
-                const schedule = [];
-                const today = new Date();
-                for (let i = 0; i < 30; i++) {
-                    const date = new Date(today);
-                    date.setDate(today.getDate() + i);
-                    if (config.daysOfWeek.includes(date.getDay())) {
-                        const dateStr = date.toISOString().split('T')[0];
-                        const label = date.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'short' }).toUpperCase().replace('-FEIRA', '');
-                        const slots = [];
-                        let current = new Date(`${dateStr}T${config.startTime}`);
-                        const end = new Date(`${dateStr}T${config.endTime}`);
-                        
-                        const lunchStart = config.breaks?.lunch?.active ? new Date(`${dateStr}T${config.breaks.lunch.start}`) : null;
-                        const lunchEnd = config.breaks?.lunch?.active ? new Date(`${dateStr}T${config.breaks.lunch.end}`) : null;
-                        const snackStart = config.breaks?.snack?.active ? new Date(`${dateStr}T${config.breaks.snack.start}`) : null;
-                        const snackEnd = config.breaks?.snack?.active ? new Date(`${dateStr}T${config.breaks.snack.end}`) : null;
-                        
-                        while (current < end) {
-                            const timeStr = current.toTimeString().slice(0, 5);
-                            let isBreak = false;
-                            if (lunchStart && lunchEnd && current >= lunchStart && current < lunchEnd) isBreak = true;
-                            if (snackStart && snackEnd && current >= snackStart && current < snackEnd) isBreak = true;
-                            
-                            if (!isBreak) {
-                                slots.push(timeStr);
-                            }
-                            current.setMinutes(current.getMinutes() + config.slotDuration);
-                        }
-                        schedule.push({ date: dateStr, label, slots });
+            const handleRegenerateSchedule = async () => {
+                if (!displayDoctor || !localDoctor) return;
+                const newSchedule = generateScheduleFromConfig(displayDoctor.workConfig);
+                try {
+                    if (loggedInProfessionalId) {
+                        const updatedProfessionals = (localDoctor.professionals || []).map(p => 
+                            p.id === loggedInProfessionalId ? { ...p, schedule: newSchedule, workConfig: displayDoctor.workConfig } : p
+                        );
+                        const updatedDoctor = { ...localDoctor, professionals: updatedProfessionals };
+                        setLocalDoctor(updatedDoctor);
+                        await setDoctors(localDoctor.id, { professionals: updatedProfessionals });
+                    } else {
+                        const updatedDoctor = { ...localDoctor, schedule: newSchedule, workConfig: displayDoctor.workConfig };
+                        setLocalDoctor(updatedDoctor);
+                        await setDoctors(localDoctor.id, { schedule: newSchedule, workConfig: displayDoctor.workConfig });
                     }
+                    showNotification("Agenda regerada e atualizada com sucesso!");
+                } catch (e) {
+                    console.error("Erro ao regerar agenda:", e);
+                    showNotification("Erro ao atualizar agenda no servidor.", "error");
                 }
-                return schedule;
-            };
-
-            const handleRegenerateSchedule = () => {
-                const newSchedule = generateSchedule(displayDoctor);
-                if (loggedInProfessionalId) {
-                    handleUpdateProfessional(loggedInProfessionalId, { schedule: newSchedule });
-                } else {
-                    setLocalDoctor(prev => prev ? ({ ...prev, schedule: newSchedule }) : null);
-                }
-                showNotification("Agenda regenerada com sucesso! Lembre-se de salvar o perfil.");
             };
 
             const updateActiveProfessional = (updates) => {
@@ -1482,7 +1487,7 @@
                     slotCapacities: {}
                 };
                 // Generate initial schedule for the new professional
-                prof.schedule = generateSchedule(prof);
+                prof.schedule = generateScheduleFromConfig(prof.workConfig);
                 
                 setLocalDoctor(prev => prev ? ({ ...prev, professionals: [...(prev.professionals || []), prof] }) : null);
                 setNewProf({ name: '', specialties: '', image: '' });
