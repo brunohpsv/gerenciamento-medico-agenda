@@ -11,7 +11,7 @@ export const Footer = () => (
             <div className="w-12 h-12 flex items-center justify-center transition-transform hover:scale-110"><LogoIcon /></div>
             <span className="text-2xl font-black uppercase tracking-tighter">Med<span className="text-red-600 italic">Agendar</span></span>
           </div>
-          <p className="text-slate-500 text-sm font-medium leading-relaxed max-w-sm">Líder nacional em soluções digitais para o setor de saúde.</p>
+          <p className="text-slate-500 text-sm font-medium leading-relaxed max-w-sm">O MedAgendar é a plataforma inovadora de agendamento de consultas médicas em tempo real, conectando pacientes, médicos e clínicas de forma rápida, simples e segura.</p>
         </div>
       </div>
       <div className="pt-12 border-t border-slate-200 flex flex-col md:flex-row items-center justify-between gap-6 text-[10px] font-black uppercase tracking-widest text-slate-600">
