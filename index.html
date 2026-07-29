@@ -478,13 +478,92 @@
             const [searchTerm, setSearchTerm] = useState('');
             const [locationTerm, setLocationTerm] = useState('');
 
+            const normalizeStr = (str) => {
+                if (!str) return '';
+                return String(str)
+                    .toLowerCase()
+                    .normalize('NFD')
+                    .replace(/[\u0300-\u036f]/g, '')
+                    .replace(/[^a-z0-9]/g, '');
+            };
+
+            const cleanStr = (str) => {
+                if (!str) return '';
+                return String(str)
+                    .toLowerCase()
+                    .normalize('NFD')
+                    .replace(/[\u0300-\u036f]/g, '');
+            };
+
             const filteredDoctors = useMemo(() => {
+                const sNorm = normalizeStr(searchTerm);
+                const sClean = cleanStr(searchTerm).trim();
+                const lNorm = normalizeStr(locationTerm);
+                const lClean = cleanStr(locationTerm).trim();
+
                 return (doctors || []).filter(doc => {
                     if (!doc || !doc.name) return false;
-                    const isActive = doc.status === 'active';
-                    const matchesSearch = (doc.name || "").toLowerCase().includes(searchTerm.toLowerCase()) || (doc.specialties || []).some(s => s.toLowerCase().includes(searchTerm.toLowerCase()));
-                    const matchesLocation = (doc.city || "").toLowerCase().includes(locationTerm.toLowerCase()) || (doc.state || "").toLowerCase().includes(locationTerm.toLowerCase());
-                    return isActive && matchesSearch && matchesLocation;
+                    
+                    const isActive = doc.status === 'active' || !doc.status;
+                    if (!isActive) return false;
+
+                    let matchesSearch = true;
+                    if (sNorm || sClean) {
+                        const docNameNorm = normalizeStr(doc.name);
+                        const docNameClean = cleanStr(doc.name);
+
+                        const specs = Array.isArray(doc.specialties) ? doc.specialties : [doc.specialties || ''];
+                        const specMatch = specs.some(s => 
+                            normalizeStr(s).includes(sNorm) || cleanStr(s).includes(sClean)
+                        );
+
+                        const crmMatch = doc.crm && (normalizeStr(doc.crm).includes(sNorm) || cleanStr(doc.crm).includes(sClean));
+                        const cnpjMatch = doc.cnpj && (normalizeStr(doc.cnpj).includes(sNorm) || cleanStr(doc.cnpj).includes(sClean));
+                        const cpfMatch = doc.cpf && (normalizeStr(doc.cpf).includes(sNorm) || cleanStr(doc.cpf).includes(sClean));
+
+                        const profsMatch = Array.isArray(doc.professionals) && doc.professionals.some(prof => {
+                            if (!prof || prof.status === 'suspended') return false;
+                            const pNameNorm = normalizeStr(prof.name);
+                            const pNameClean = cleanStr(prof.name);
+                            const pSpecs = Array.isArray(prof.specialties) ? prof.specialties : [prof.specialties || ''];
+                            const pSpecMatch = pSpecs.some(s => 
+                                normalizeStr(s).includes(sNorm) || cleanStr(s).includes(sClean)
+                            );
+                            const pCrmMatch = prof.crm && (normalizeStr(prof.crm).includes(sNorm) || cleanStr(prof.crm).includes(sClean));
+                            return pNameNorm.includes(sNorm) || pNameClean.includes(sClean) || pSpecMatch || pCrmMatch;
+                        });
+
+                        matchesSearch = (
+                            docNameNorm.includes(sNorm) ||
+                            docNameClean.includes(sClean) ||
+                            specMatch ||
+                            crmMatch ||
+                            cnpjMatch ||
+                            cpfMatch ||
+                            profsMatch
+                        );
+                    }
+
+                    let matchesLocation = true;
+                    if (lNorm || lClean) {
+                        const cityNorm = normalizeStr(doc.city);
+                        const cityClean = cleanStr(doc.city);
+                        const stateNorm = normalizeStr(doc.state);
+                        const stateClean = cleanStr(doc.state);
+                        const addressNorm = normalizeStr(doc.address);
+                        const addressClean = cleanStr(doc.address);
+                        const neighborNorm = normalizeStr(doc.neighborhood);
+                        const neighborClean = cleanStr(doc.neighborhood);
+
+                        matchesLocation = (
+                            cityNorm.includes(lNorm) || cityClean.includes(lClean) ||
+                            stateNorm.includes(lNorm) || stateClean.includes(lClean) ||
+                            addressNorm.includes(lNorm) || addressClean.includes(lClean) ||
+                            neighborNorm.includes(lNorm) || neighborClean.includes(lClean)
+                        );
+                    }
+
+                    return matchesSearch && matchesLocation;
                 });
             }, [doctors, searchTerm, locationTerm]);
 
@@ -507,11 +586,24 @@
                         </div>
                     </section>
                     <section className="lg:max-w-none mx-auto px-4 lg:px-8 py-6 lg:py-4">
-                        <div className="grid grid-cols-1 gap-3">
-                            {filteredDoctors.map(doc => (
-                                <DoctorCard key={doc.id} doctor={doc} isActive={selectedDoctorId === doc.id} onClick={() => onSelectDoctor(doc.id)} />
-                            ))}
-                        </div>
+                        {filteredDoctors.length > 0 ? (
+                            <div className="grid grid-cols-1 gap-3">
+                                {filteredDoctors.map(doc => (
+                                    <DoctorCard key={doc.id} doctor={doc} isActive={selectedDoctorId === doc.id} onClick={() => onSelectDoctor(doc.id)} />
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="bg-white p-8 text-center border border-slate-200 shadow-sm space-y-3">
+                                <i className="fas fa-search-minus text-3xl text-slate-300 mb-2"></i>
+                                <p className="text-xs font-black uppercase tracking-wider text-slate-700">Nenhum profissional ou clínica encontrado com os termos pesquisados.</p>
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Tente buscar por nome, especialidade, cidade ou UF.</p>
+                                {(searchTerm || locationTerm) && (
+                                    <button onClick={() => { setSearchTerm(''); setLocationTerm(''); }} className="mt-2 px-4 py-2 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest hover:bg-red-600 transition-colors">
+                                        LIMPAR FILTROS
+                                    </button>
+                                )}
+                            </div>
+                        )}
                     </section>
                     <section className="lg:max-w-none mx-auto px-4 lg:px-8 py-6 lg:py-6 border-t border-slate-100">
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
