@@ -1325,10 +1325,16 @@
                     try {
                         let updatedDoctor = { ...localDoctor };
                         if (updatedDoctor.isClinic && updatedDoctor.professionals) {
-                            updatedDoctor.professionals = updatedDoctor.professionals.map(p => ({
-                                ...p,
-                                schedule: generateScheduleFromConfig(p.workConfig || DEFAULT_WORK_CONFIG)
-                            }));
+                            const companyDays = updatedDoctor.workConfig?.daysOfWeek || [1, 2, 3, 4, 5];
+                            updatedDoctor.professionals = updatedDoctor.professionals.map(p => {
+                                const pDays = (p.workConfig?.daysOfWeek || []).filter(d => companyDays.includes(d));
+                                const pWorkConfig = { ...(p.workConfig || DEFAULT_WORK_CONFIG), daysOfWeek: pDays };
+                                return {
+                                    ...p,
+                                    workConfig: pWorkConfig,
+                                    schedule: generateScheduleFromConfig(pWorkConfig)
+                                };
+                            });
                         }
                         updatedDoctor.schedule = generateScheduleFromConfig(updatedDoctor.workConfig || DEFAULT_WORK_CONFIG);
 
@@ -1362,12 +1368,35 @@
                 const currentDays = target.workConfig.daysOfWeek || [];
                 const newDays = currentDays.includes(day) 
                     ? currentDays.filter(d => d !== day)
-                    : [...currentDays, day].sort();
+                    : [...currentDays, day].sort((a, b) => a - b);
                 
                 if (loggedInProfessionalId) {
+                    const companyDays = localDoctor?.workConfig?.daysOfWeek || [1, 2, 3, 4, 5];
+                    if (!currentDays.includes(day) && !companyDays.includes(day)) {
+                        showNotification("A empresa não atende neste dia da semana.", "error");
+                        return;
+                    }
                     updateActiveProfessional({ workConfig: { ...target.workConfig, daysOfWeek: newDays } });
                 } else {
-                    setLocalDoctor(prev => ({ ...prev, workConfig: { ...prev.workConfig, daysOfWeek: newDays } }));
+                    setLocalDoctor(prev => {
+                        if (!prev) return null;
+                        const updatedProfessionals = (prev.professionals || []).map(prof => {
+                            const profDays = prof.workConfig?.daysOfWeek || [];
+                            const filteredProfDays = profDays.filter(d => newDays.includes(d));
+                            return {
+                                ...prof,
+                                workConfig: {
+                                    ...(prof.workConfig || {}),
+                                    daysOfWeek: filteredProfDays
+                                }
+                            };
+                        });
+                        return {
+                            ...prev,
+                            workConfig: { ...prev.workConfig, daysOfWeek: newDays },
+                            professionals: updatedProfessionals
+                        };
+                    });
                 }
             };
 
@@ -1524,9 +1553,29 @@
                         setLocalDoctor(updatedDoctor);
                         await setDoctors(localDoctor.id, { professionals: updatedProfessionals });
                     } else {
-                        const updatedDoctor = { ...localDoctor, schedule: newSchedule, workConfig: displayDoctor.workConfig };
+                        const companyDays = displayDoctor.workConfig.daysOfWeek || [];
+                        const updatedProfessionals = (localDoctor.professionals || []).map(p => {
+                            const pDays = (p.workConfig?.daysOfWeek || []).filter(d => companyDays.includes(d));
+                            const pWorkConfig = { ...(p.workConfig || {}), daysOfWeek: pDays };
+                            const pSchedule = generateScheduleFromConfig(pWorkConfig);
+                            return {
+                                ...p,
+                                workConfig: pWorkConfig,
+                                schedule: pSchedule
+                            };
+                        });
+                        const updatedDoctor = { 
+                            ...localDoctor, 
+                            schedule: newSchedule, 
+                            workConfig: displayDoctor.workConfig,
+                            professionals: updatedProfessionals
+                        };
                         setLocalDoctor(updatedDoctor);
-                        await setDoctors(localDoctor.id, { schedule: newSchedule, workConfig: displayDoctor.workConfig });
+                        await setDoctors(localDoctor.id, { 
+                            schedule: newSchedule, 
+                            workConfig: displayDoctor.workConfig,
+                            professionals: updatedProfessionals
+                        });
                     }
                     showNotification("Agenda regerada e atualizada com sucesso!");
                 } catch (e) {
@@ -1580,13 +1629,17 @@
 
             const handleAddProfessional = () => {
                 if (!newProf.name || !localDoctor) return;
+                const companyDays = localDoctor.workConfig?.daysOfWeek || [1, 2, 3, 4, 5];
+                const initialWorkConfig = JSON.parse(JSON.stringify(localDoctor.workConfig || DEFAULT_WORK_CONFIG));
+                initialWorkConfig.daysOfWeek = [...companyDays];
+
                 const prof = {
                     id: Math.random().toString(36).substr(2, 9),
                     name: newProf.name,
                     specialties: newProf.specialties.split(',').map(s => s.trim()),
                     image: newProf.image,
                     status: 'active',
-                    workConfig: JSON.parse(JSON.stringify(DEFAULT_WORK_CONFIG)),
+                    workConfig: initialWorkConfig,
                     maxSlotsPerTime: 1,
                     slotCapacities: {}
                 };
